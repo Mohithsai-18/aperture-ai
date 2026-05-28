@@ -1,0 +1,128 @@
+{{- if .Values.inference.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aperture-ai.fullname" . }}-inference
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "aperture-ai.labels" . | nindent 4 }}
+    app: aperture-inference
+    component: inference
+spec:
+  replicas: {{ .Values.inference.replicaCount }}
+  selector:
+    matchLabels:
+      app: aperture-inference
+      {{- include "aperture-ai.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0          # Zero-downtime rollout
+  template:
+    metadata:
+      labels:
+        app: aperture-inference
+        {{- include "aperture-ai.selectorLabels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.inference.service.metricsPort }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: {{ include "aperture-ai.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.inference.securityContext | nindent 8 }}
+      {{- with .Values.inference.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.inference.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.inference.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.inference.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.inference.preloader.enabled }}
+      initContainers:
+        - name: model-preloader
+          image: "{{ .Values.inference.preloader.image.repository }}:{{ .Values.inference.preloader.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          command: ["python3.11", "model_preloader.py"]
+          env:
+            - name: MODEL_PATH
+              value: {{ .Values.inference.env.MODEL_PATH | quote }}
+            - name: MODEL_DIR
+              value: "/models"
+            - name: HF_HOME
+              value: "/tmp/huggingface"
+            - name: HOME
+              value: "/tmp"
+            {{- if .Values.inference.secretEnv.HF_TOKEN }}
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.inference.secretEnv.HF_TOKEN.secretName }}
+                  key: {{ .Values.inference.secretEnv.HF_TOKEN.key }}
+                  optional: true
+            {{- end }}
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.inference.preloader.resources | nindent 12 }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      {{- end }}
+      containers:
+        - name: inference
+          image: "{{ .Values.inference.image.repository }}:{{ .Values.inference.image.tag }}"
+          imagePullPolicy: {{ .Values.inference.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.inference.service.port }}
+              protocol: TCP
+          env:
+            {{- range $key, $val := .Values.inference.env }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
+            {{- range $envName, $secretRef := .Values.inference.secretEnv }}
+            - name: {{ $envName }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretRef.secretName }}
+                  key: {{ $secretRef.key }}
+                  optional: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.inference.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.inference.containerSecurityContext | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.inference.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.inference.readinessProbe | nindent 12 }}
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: model-storage
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+{{- end }}

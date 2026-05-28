@@ -1,0 +1,61 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aperture-inference-rules
+  namespace: default
+  labels:
+    app: aperture-inference
+    release: prometheus
+spec:
+  groups:
+    - name: aperture.inference.recording.rules
+      rules:
+        # Pre-compute Tokens Per Second across the cluster by model
+        - record: namespace_model:aperture_tokens_per_second:rate1m
+          expr: sum by (namespace, model) (rate(aperture_tokens_generated_total[1m]))
+        
+        # Pre-compute P99 TTFT
+        - record: namespace_model:aperture_ttft_seconds:p99
+          expr: histogram_quantile(0.99, sum by (le, namespace, model) (rate(aperture_ttft_seconds_bucket[5m])))
+
+        # Pre-compute P99 Request Duration
+        - record: namespace_model:aperture_request_duration_seconds:p99
+          expr: histogram_quantile(0.99, sum by (le, namespace, model) (rate(aperture_request_duration_seconds_bucket[5m])))
+
+    - name: aperture.inference.alerting.rules
+      rules:
+        - alert: HighTimeToFirstToken
+          expr: namespace_model:aperture_ttft_seconds:p99 > 5
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High TTFT for model {{ $labels.model }}"
+            description: "P99 Time-To-First-Token is > 5s (current value: {{ $value }}s)."
+
+        - alert: GPUVRAMExhaustionRisk
+          expr: (DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE)) * 100 > 95
+          for: 3m
+          labels:
+            severity: critical
+          annotations:
+            summary: "GPU VRAM almost full on pod {{ $labels.pod }}"
+            description: "GPU VRAM utilization is at {{ $value }}%."
+
+        - alert: GPUTemperatureCritical
+          expr: DCGM_FI_DEV_GPU_TEMP > 85
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "High GPU Temperature on pod {{ $labels.pod }}"
+            description: "GPU Temperature is {{ $value }}C. Hardware throttling may occur."
+
+        - alert: HighInferenceConcurrency
+          expr: aperture_active_requests > 100
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High concurrent requests on {{ $labels.pod }}"
+            description: "Pod is currently handling {{ $value }} active requests."

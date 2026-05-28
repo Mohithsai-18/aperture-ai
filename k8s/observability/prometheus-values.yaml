@@ -1,0 +1,86 @@
+# kube-prometheus-stack values — optimised for Docker Desktop local dev
+# Persistent storage disabled (ephemeral) to avoid PVC binding issues.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ── Prometheus ──────────────────────────────────────────────────────────────
+prometheus:
+  prometheusSpec:
+    # Scrape every PodMonitor & ServiceMonitor in any namespace
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorNamespaceSelector: {}
+    podMonitorSelector: {}
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    # Scrape interval
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    # No persistent storage for local testing
+    storageSpec: {}
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# ── Grafana ──────────────────────────────────────────────────────────────────
+grafana:
+  adminPassword: "aperture-admin"
+  service:
+    type: NodePort
+    nodePort: 32000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  # Preload Aperture AI dashboard via ConfigMap sidecar
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+  # datasources managed by the chart — do not duplicate here
+
+# ── AlertManager ─────────────────────────────────────────────────────────────
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+
+# ── node-exporter ─────────────────────────────────────────────────────────────
+nodeExporter:
+  enabled: true
+
+# ── kube-state-metrics ───────────────────────────────────────────────────────
+kubeStateMetrics:
+  enabled: true
+
+# ── Disable components not needed locally ────────────────────────────────────
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false

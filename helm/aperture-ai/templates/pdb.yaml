@@ -1,0 +1,15 @@
+{{- if and .Values.inference.enabled .Values.inference.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aperture-ai.fullname" . }}-inference
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "aperture-ai.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.inference.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: aperture-inference
+      {{- include "aperture-ai.selectorLabels" . | nindent 6 }}
+{{- end }}

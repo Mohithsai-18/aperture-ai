@@ -1,0 +1,84 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: aperture-gpuworkload-validating-webhook
+  annotations:
+    cert-manager.io/inject-ca-from: aperture-system/aperture-serving-cert
+  labels:
+    app.kubernetes.io/name: aperture-operator
+webhooks:
+  - name: vgpuworkload.aperture.ai
+    admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      service:
+        name: aperture-webhook-service
+        namespace: aperture-system
+        path: /validate-aperture-ai-v1alpha1-gpuworkload
+        port: 443
+      # For self-signed TLS, inject the CA bundle here.
+      # In production, cert-manager handles this automatically via the annotation above.
+      # caBundle: <BASE64_ENCODED_CA_CERT>
+    failurePolicy: Fail
+    sideEffects: None
+    rules:
+      - apiGroups:
+          - aperture.ai
+        apiVersions:
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - gpuworkloads
+        scope: Namespaced
+    matchPolicy: Equivalent
+    timeoutSeconds: 10
+
+---
+# Webhook Service — routes traffic to the operator's webhook server.
+apiVersion: v1
+kind: Service
+metadata:
+  name: aperture-webhook-service
+  namespace: aperture-system
+  labels:
+    app.kubernetes.io/name: aperture-operator
+spec:
+  ports:
+    - port: 443
+      targetPort: 9443
+      protocol: TCP
+      name: webhook
+  selector:
+    app.kubernetes.io/name: aperture-operator
+
+---
+# Self-signed Certificate (cert-manager issuer).
+# Replace with your own CA/issuer in production.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: aperture-selfsigned-issuer
+  namespace: aperture-system
+spec:
+  selfSigned: {}
+
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: aperture-serving-cert
+  namespace: aperture-system
+spec:
+  dnsNames:
+    - aperture-webhook-service.aperture-system.svc
+    - aperture-webhook-service.aperture-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: aperture-selfsigned-issuer
+  secretName: aperture-webhook-server-cert
+  duration: 8760h   # 1 year
+  renewBefore: 720h  # 30 days

@@ -1,0 +1,92 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aperture-monitoring
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aperture-inference-monitor
+  namespace: aperture-monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - default
+  selector:
+    matchLabels:
+      app: aperture-inference
+  endpoints:
+    - port: metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      honorLabels: true
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aperture-alerts
+  namespace: aperture-monitoring
+spec:
+  groups:
+    - name: aperture-alerts
+      rules:
+        - alert: InferenceServerDown
+          expr: up{job="aperture-inference"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Inference server is down"
+            description: "No scrape data for aperture-inference job for 2 minutes."
+        - alert: TokenQuotaNearLimit
+          expr: aperture_quota_used_total > 85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Token quota near limit"
+            description: "Token quota used is greater than 85% for 5 minutes."
+        - alert: HighP99Latency
+          expr: histogram_quantile(0.99, sum by (le, pod) (rate(aperture_ttft_seconds_bucket[5m]))) > 2
+          for: 3m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High P99 latency"
+            description: "P99 TTFT latency > 2s for 3 minutes."
+        - alert: GPUMemoryPressure
+          expr: (DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE)) * 100 > 90
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High GPU memory pressure"
+            description: "GPU VRAM utilization is over 90% for 5 minutes."
+        - alert: GPUUtilizationLow
+          expr: DCGM_FI_DEV_GPU_UTIL < 20
+          for: 10m
+          labels:
+            severity: info
+          annotations:
+            summary: "Low GPU utilization"
+            description: "GPU utilization is below 20% for 10 minutes."
+        - alert: HighRequestQueueDepth
+          expr: aperture_active_requests > 150
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High request queue depth"
+            description: "Active requests exceeded 150 for 2 minutes."
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aperture-inference-pdb
+  namespace: default
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: aperture-inference

@@ -1,0 +1,26 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: aperture-inference
+  namespace: default
+  labels:
+    app: aperture-inference
+    # The release label ensures the Prometheus operator selector picks this up
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: aperture-inference
+  podMetricsEndpoints:
+    - port: http # Make sure your inference container port is named 'http'
+      path: /metrics
+      interval: 10s
+      scrapeTimeout: 5s
+      # Relabelings to extract kubernetes labels as prometheus labels
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_label_aperture_ai_workload]
+          targetLabel: workload
+        - sourceLabels: [__meta_kubernetes_pod_label_aperture_ai_model]
+          targetLabel: model
+        - sourceLabels: [__meta_kubernetes_pod_label_aperture_ai_partition_mode]
+          targetLabel: partition_mode

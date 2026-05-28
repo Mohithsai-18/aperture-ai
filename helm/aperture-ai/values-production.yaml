@@ -1,0 +1,84 @@
+# Production overrides — GPU enabled, full HA, autoscaling, TLS
+inference:
+  replicaCount: 2
+
+  env:
+    USE_GPU: "true"
+    TOKEN_QUOTA: "1000000"
+    KV_CACHE_GB: "16"
+    OTEL_ENABLED: "true"
+    OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.aperture-monitoring.svc:4317"
+
+  gpu:
+    enabled: true
+    count: 1
+
+  resources:
+    requests:
+      cpu: "2"
+      memory: 8Gi
+      nvidia.com/gpu: "1"
+    limits:
+      cpu: "8"
+      memory: 24Gi
+      nvidia.com/gpu: "1"
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # Spread pods across GPU nodes for HA
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app: aperture-inference
+
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app: aperture-inference
+            topologyKey: kubernetes.io/hostname
+
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+
+  nodeSelector:
+    accelerator: nvidia-gpu
+
+  ingress:
+    enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    hosts:
+      - host: api.aperture.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: aperture-prod-tls
+        hosts:
+          - api.aperture.example.com
+
+networkPolicy:
+  enabled: true
+
+monitoring:
+  enabled: true
+  prometheusRule:
+    enabled: true

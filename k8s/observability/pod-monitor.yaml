@@ -1,0 +1,91 @@
+---
+# PodMonitor: scrapes /metrics directly from inference pods.
+# We use PodMonitor (not ServiceMonitor) because the pod port is named "http"
+# and both /health and /metrics are served on 8080.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: aperture-inference
+  namespace: aperture-monitoring
+  labels:
+    app: aperture-inference
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - default
+  selector:
+    matchLabels:
+      app: aperture-inference
+  podMetricsEndpoints:
+    - port: http           # matches the containerPort name in the Deployment
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      honorLabels: true
+
+---
+# PrometheusRule: alerting rules for Aperture AI RED metrics.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aperture-alerts
+  namespace: aperture-monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: aperture.inference
+      interval: 30s
+      rules:
+        # ── Rate ──────────────────────────────────────────────────────────────
+        - alert: InferenceServerDown
+          expr: up{job="aperture-inference"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Inference server is down"
+            description: "No scrape data from aperture-inference for 2 minutes."
+
+        # ── Errors ───────────────────────────────────────────────────────────
+        - alert: TokenQuotaNearLimit
+          expr: |
+            (aperture_tokens_generated_total / aperture_token_quota) * 100 > 85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Token quota near limit (>85%)"
+            description: "Pod {{ $labels.pod }} has consumed {{ $value | printf \"%.1f\" }}% of its token quota."
+
+        # ── Duration (latency) ───────────────────────────────────────────────
+        - alert: HighAvgLatency
+          expr: aperture_avg_request_latency_ms > 2000
+          for: 3m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High average request latency"
+            description: "Average request latency is {{ $value | printf \"%.0f\" }}ms (threshold: 2000ms)."
+
+        # ── Throughput ───────────────────────────────────────────────────────
+        - alert: HighRequestQueueDepth
+          expr: aperture_requests_total > 10000
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High cumulative request count"
+            description: "Aperture has served {{ $value }} total requests."
+
+        # ── GPU memory (only fires when DCGM exporter is present) ─────────────
+        - alert: GPUMemoryPressure
+          expr: |
+            (DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE)) * 100 > 90
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "GPU VRAM utilization >90%"
+            description: "GPU {{ $labels.gpu }} on node {{ $labels.node }} is at {{ $value | printf \"%.1f\" }}% VRAM."

@@ -1,0 +1,83 @@
+---
+# NetworkPolicy: default-deny, then explicitly allow required traffic only.
+{{- if .Values.networkPolicy.enabled }}
+# 1. Default deny all ingress to inference pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "aperture-ai.fullname" . }}-deny-all
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: aperture-inference
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# 2. Allow ingress from nginx ingress controller
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "aperture-ai.fullname" . }}-allow-ingress
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: aperture-inference
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# 3. Allow Prometheus scraping from monitoring namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "aperture-ai.fullname" . }}-allow-prometheus
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: aperture-inference
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: aperture-monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# 4. Allow DNS + HuggingFace HTTPS egress (for model download)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "aperture-ai.fullname" . }}-allow-egress
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: aperture-inference
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53        # DNS
+        - protocol: TCP
+          port: 443       # HTTPS (HuggingFace, OTEL)
+        - protocol: TCP
+          port: 4317      # OTLP gRPC
+{{- end }}

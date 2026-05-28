@@ -1,0 +1,22 @@
+---
+# Service for the inference server
+{{- if .Values.inference.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "aperture-ai.fullname" . }}-inference
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "aperture-ai.labels" . | nindent 4 }}
+    app: aperture-inference
+spec:
+  type: {{ .Values.inference.service.type }}
+  ports:
+    - port: {{ .Values.inference.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: aperture-inference
+    {{- include "aperture-ai.selectorLabels" . | nindent 4 }}
+{{- end }}

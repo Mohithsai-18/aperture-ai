@@ -1,0 +1,24 @@
+---
+# Provisions the Prometheus datasource into Grafana automatically.
+# The uid "prometheus" must match what the dashboard JSON references.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aperture-grafana-datasource
+  namespace: aperture-monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  aperture-datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: AperturePrometheus
+        type: prometheus
+        uid: aperture-prometheus
+        url: http://kube-prometheus-stack-prometheus.aperture-monitoring.svc.cluster.local:9090
+        access: proxy
+        isDefault: false
+        editable: true
+        jsonData:
+          timeInterval: "15s"
+          httpMethod: POST

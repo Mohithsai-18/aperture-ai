@@ -1,0 +1,16 @@
+---
+# PodDisruptionBudget: ensures at least 1 inference pod stays available
+# during voluntary disruptions (node drains, cluster upgrades).
+# Apply per-workload by setting the workload name label.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aperture-inference-pdb
+  namespace: default
+  labels:
+    app.kubernetes.io/name: aperture-operator
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: aperture-inference

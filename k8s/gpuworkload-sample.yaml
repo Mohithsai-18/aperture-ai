@@ -1,0 +1,15 @@
+---
+apiVersion: aperture.ai/v1alpha1
+kind: GPUWorkload
+metadata:
+  name: opt-125m-workload
+  namespace: default
+  labels:
+    app: aperture-inference
+    model: facebook-opt-125m
+spec:
+  modelName: facebook/opt-125m
+  gpu: 0
+  partitionMode: MPS
+  tokenQuota: 50000
+  kvCacheGB: 4

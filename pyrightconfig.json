@@ -1,0 +1,13 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "stubPath": "inference/typestubs",
+  "reportMissingModuleSource": false,
+  "pythonVersion": "3.11",
+  "executionEnvironments": [
+    {
+      "root": "inference",
+      "extraPaths": ["inference"]
+    }
+  ]
+}

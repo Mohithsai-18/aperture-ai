@@ -1,0 +1,316 @@
+{
+  "title": "Aperture — GPU Inference Platform",
+  "uid": "aperture-gpu-v1",
+  "refresh": "10s",
+  "timezone": "browser",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "tags": [
+    "aperture",
+    "gpu",
+    "inference",
+    "kubernetes"
+  ],
+  "schemaVersion": 38,
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus"
+      },
+      {
+        "name": "workload",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": "label_values(workload)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true
+      },
+      {
+        "name": "pod",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": "label_values(DCGM_FI_DEV_GPU_UTIL{workload=~\"$workload\"}, pod)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "GPU SM Utilization",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "DCGM_FI_DEV_GPU_UTIL{pod=~\"$pod\"}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "VRAM %",
+      "type": "gauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "(DCGM_FI_DEV_FB_USED{pod=~\"$pod\"} / (DCGM_FI_DEV_FB_USED{pod=~\"$pod\"} + DCGM_FI_DEV_FB_FREE{pod=~\"$pod\"})) * 100",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "GPU Temp",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "DCGM_FI_DEV_GPU_TEMP{pod=~\"$pod\"}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Active Requests",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 6,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "sum(aperture_active_requests{pod=~\"$pod\"})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Tokens/sec",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 8,
+        "w": 18,
+        "h": 6
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(aperture_tokens_generated_total{pod=~\"$pod\"}[1m])) by (pod)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "TTFT P50/P95/P99",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(aperture_ttft_seconds_bucket{pod=~\"$pod\"}[5m])) by (le))",
+          "legendFormat": "P50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(aperture_ttft_seconds_bucket{pod=~\"$pod\"}[5m])) by (le))",
+          "legendFormat": "P95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(aperture_ttft_seconds_bucket{pod=~\"$pod\"}[5m])) by (le))",
+          "legendFormat": "P99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Request Duration P95",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(aperture_request_duration_seconds_bucket{pod=~\"$pod\"}[5m])) by (le, pod))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Token Quota %",
+      "type": "barchart",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "aperture_quota_used_total{pod=~\"$pod\"}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Total Tokens",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 22,
+        "w": 4,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(aperture_tokens_generated_total{pod=~\"$pod\"})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Request Rate",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(aperture_ttft_seconds_count{pod=~\"$pod\"}[1m])) by (pod)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "GPUWorkload Phase",
+      "type": "piechart",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum(aperture_gpuworkload_phase{pod=~\"$pod\"}) by (phase)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "GPU Heatmap",
+      "type": "heatmap",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 30,
+        "w": 16,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "DCGM_FI_DEV_GPU_UTIL{pod=~\"$pod\"}",
+          "format": "heatmap",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

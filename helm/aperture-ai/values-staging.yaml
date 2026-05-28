@@ -1,0 +1,31 @@
+# Staging overrides — lightweight, CPU-only, no GPU, reduced resources
+inference:
+  replicaCount: 1
+  env:
+    USE_GPU: "false"
+    TOKEN_QUOTA: "10000"
+    OTEL_ENABLED: "true"
+    OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.aperture-monitoring.svc:4317"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  autoscaling:
+    enabled: false
+  ingress:
+    enabled: true
+    hosts:
+      - host: staging.aperture.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: aperture-staging-tls
+        hosts:
+          - staging.aperture.example.com
+
+monitoring:
+  enabled: true

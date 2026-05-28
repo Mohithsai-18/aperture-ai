@@ -1,0 +1,15 @@
+---
+# PersistentVolumeClaim for shared model weights.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aperture-model-cache
+  namespace: default
+  labels:
+    app.kubernetes.io/name: aperture-operator
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi

@@ -1,0 +1,618 @@
+================================================================================
+  APERTURE AI — COMPLETE TESTING GUIDE
+  How to test every layer of the platform
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1.  Prerequisites & Setup
+2.  Infrastructure Tests (Kubernetes)
+3.  Operator Tests
+4.  Inference Server Tests (Unit)
+5.  API Endpoint Tests (Manual curl)
+6.  Metrics & Observability Tests
+7.  Load / Performance Benchmark
+8.  Helm Chart Tests
+9.  CI/CD Pipeline Tests
+10. Security Tests
+11. End-to-End Test Checklist
+12. Debugging Guide
+13. Expected Outputs Reference
+
+================================================================================
+1. PREREQUISITES & SETUP
+================================================================================
+
+Before running any tests, ensure these are ready:
+
+  [A] Kubernetes cluster running (Docker Desktop)
+      kubectl get nodes
+      Expected: desktop-control-plane   Ready
+
+  [B] Operator deployed
+      kubectl get pods -n aperture-system
+      Expected: aperture-operator-xxx   1/1   Running
+
+  [C] Inference pod running
+      kubectl get pods -n default -l app=aperture-inference
+      Expected: opt-125m-workload-inference-xxx   1/1   Running
+
+  [D] Port-forwards active (run port-forward.ps1 or manually):
+      kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n aperture-monitoring
+      kubectl port-forward pod/<inference-pod> 8080:8080 -n default
+
+  [E] Python 3.11 installed with httpx:
+      python --version          # Python 3.11.x
+      pip install httpx         # for benchmark
+
+================================================================================
+2. INFRASTRUCTURE TESTS (Kubernetes)
+================================================================================
+
+--- Test 2.1: All pods healthy ---
+kubectl get pods --all-namespaces
+
+EXPECTED (key pods):
+  aperture-system    aperture-operator-xxx              1/1   Running
+  default            opt-125m-workload-inference-xxx    1/1   Running
+  aperture-monitoring kube-prometheus-stack-grafana-xxx 3/3   Running
+  aperture-monitoring prometheus-xxx                    2/2   Running
+
+--- Test 2.2: CRD registered ---
+kubectl get crd gpuworkloads.aperture.ai
+
+EXPECTED:
+  NAME                       CREATED AT
+  gpuworkloads.aperture.ai   2026-xx-xxTxx:xx:xxZ
+
+--- Test 2.3: GPUWorkload CR applied ---
+kubectl get gpuworkloads -n default
+
+EXPECTED:
+  NAME                 AGE
+  opt-125m-workload    xxm
+
+--- Test 2.4: Operator generated the Deployment correctly ---
+kubectl get deployment opt-125m-workload-inference -n default -o yaml | findstr "USE_GPU\|HOME\|TORCH"
+
+EXPECTED output contains:
+  - name: USE_GPU
+    value: "false"
+  - name: HOME
+    value: /tmp
+  - name: TORCH_HOME
+    value: /tmp/torch
+
+--- Test 2.5: Services exist ---
+kubectl get svc -n default
+kubectl get svc -n aperture-monitoring
+
+--- Test 2.6: PodMonitor registered ---
+kubectl get podmonitor -n default
+
+================================================================================
+3. OPERATOR TESTS
+================================================================================
+
+--- Test 3.1: Deploy CPU-only workload (gpu: 0) ---
+
+Apply the sample CR:
+  kubectl apply -f k8s/gpuworkload-sample.yaml
+
+Verify operator reconciled:
+  kubectl get gpuworkload opt-125m-workload -n default
+  kubectl describe gpuworkload opt-125m-workload -n default
+
+Check operator logs for reconcile messages:
+  kubectl logs -n aperture-system -l control-plane=controller-manager --tail=30
+
+EXPECTED log lines:
+  "Reconciling GPUWorkload"
+  "GPU=0, activating CPU fallback"
+  "Deployment created/updated"
+
+--- Test 3.2: Operator injects correct env vars ---
+kubectl get deployment opt-125m-workload-inference -n default \
+  -o jsonpath="{.spec.template.spec.containers[0].env}" | python -m json.tool
+
+EXPECTED: HOME, TORCH_HOME, TORCHINDUCTOR_CACHE_DIR, HF_HOME all set to /tmp/*
+
+--- Test 3.3: Operator removes GPU resource limits when gpu=0 ---
+kubectl get deployment opt-125m-workload-inference -n default \
+  -o jsonpath="{.spec.template.spec.containers[0].resources}"
+
+EXPECTED: No "nvidia.com/gpu" in limits or requests
+
+--- Test 3.4: Delete and re-create CR (reconcile loop) ---
+kubectl delete gpuworkload opt-125m-workload -n default
+kubectl apply -f k8s/gpuworkload-sample.yaml
+kubectl get pods -n default -w
+# Watch pod go: Pending -> Init:0/1 -> Running
+
+================================================================================
+4. INFERENCE SERVER UNIT TESTS
+================================================================================
+
+Run the built-in pytest suite:
+
+  cd "e:\aperture ai\inference"
+  set USE_GPU=false
+  set MODEL_PATH=facebook/opt-125m
+  python -m pytest test_server.py -v
+
+EXPECTED OUTPUT:
+  test_server.py::test_health_endpoint              PASSED
+  test_server.py::test_generate_endpoint            PASSED
+  test_server.py::test_metrics_endpoint             PASSED
+  test_server.py::test_quota_exceeded               PASSED
+  test_server.py::test_invalid_request              PASSED
+  ===== X passed in X.Xs =====
+
+If a test fails:
+  python -m pytest test_server.py -v --tb=long    # full traceback
+
+================================================================================
+5. API ENDPOINT TESTS (Manual)
+================================================================================
+
+All commands below use PowerShell Invoke-RestMethod.
+Ensure port-forward to 8080 is active first.
+
+--- Test 5.1: Health Check ---
+Invoke-RestMethod http://localhost:8080/health | ConvertTo-Json
+
+EXPECTED:
+{
+  "status": "healthy (fallback)",
+  "model": "facebook/opt-125m",
+  "tokens_generated": 0,
+  "token_quota": 50000,
+  "uptime_seconds": 123.4
+}
+
+WHAT TO CHECK:
+  - status = "healthy (fallback)" means CPU mode is active
+  - status = "healthy" means GPU/vLLM is loaded
+  - token_quota should be > 0
+  - uptime_seconds should be increasing
+
+--- Test 5.2: Generate Endpoint (Basic) ---
+$body = '{"prompt":"What is Aperture AI?","max_tokens":30}'
+Invoke-RestMethod http://localhost:8080/generate -Method POST `
+  -ContentType "application/json" -Body $body | ConvertTo-Json
+
+EXPECTED:
+{
+  "text": "[CPU Fallback] What is Aperture AI? → Aperture AI is a GPU-orchestrated...",
+  "tokens_generated": 20
+}
+
+WHAT TO CHECK:
+  - text field is non-empty
+  - tokens_generated > 0
+  - No error field in response
+
+--- Test 5.3: Generate with max_tokens variation ---
+# Short response
+$body = '{"prompt":"Hello","max_tokens":5}'
+Invoke-RestMethod http://localhost:8080/generate -Method POST `
+  -ContentType "application/json" -Body $body
+
+# Long response
+$body = '{"prompt":"Explain transformers in detail","max_tokens":100}'
+Invoke-RestMethod http://localhost:8080/generate -Method POST `
+  -ContentType "application/json" -Body $body
+
+WHAT TO CHECK:
+  - Short: tokens_generated <= 5
+  - Long: tokens_generated approaches 100
+
+--- Test 5.4: Token Quota Enforcement ---
+# First check remaining quota
+Invoke-RestMethod http://localhost:8080/health | Select-Object -ExpandProperty token_quota
+
+# Submit request larger than remaining quota
+$body = '{"prompt":"test","max_tokens":999999}'
+try {
+  Invoke-RestMethod http://localhost:8080/generate -Method POST `
+    -ContentType "application/json" -Body $body
+} catch {
+  Write-Host "Error: $($_.Exception.Response.StatusCode)"
+}
+
+EXPECTED: HTTP 429 Too Many Requests
+Response body: {"error":"quota_exceeded", ...}
+
+--- Test 5.5: Prometheus Metrics Endpoint ---
+Invoke-RestMethod http://localhost:8080/metrics
+
+EXPECTED output (Prometheus text format):
+  # HELP aperture_requests_total Total number of HTTP requests handled.
+  # TYPE aperture_requests_total counter
+  aperture_requests_total 134
+
+  # HELP aperture_tokens_generated_total Total tokens generated since startup.
+  aperture_tokens_generated_total 0
+
+  aperture_token_quota 50000
+  aperture_token_quota_remaining 50000
+  aperture_avg_request_latency_ms 0.336
+  aperture_uptime_seconds 594.15
+  aperture_engine_loaded 0
+
+WHAT TO CHECK:
+  - All 7 metrics present
+  - aperture_engine_loaded = 0 (CPU mode) or 1 (GPU mode)
+  - aperture_requests_total increments on each call
+
+--- Test 5.6: Invalid Request Validation ---
+# Missing prompt field
+$body = '{"max_tokens":30}'
+try {
+  Invoke-RestMethod http://localhost:8080/generate -Method POST `
+    -ContentType "application/json" -Body $body
+} catch {
+  Write-Host "HTTP $($_.Exception.Response.StatusCode)"
+}
+EXPECTED: HTTP 422 Unprocessable Entity
+
+# Negative max_tokens
+$body = '{"prompt":"test","max_tokens":-1}'
+EXPECTED: HTTP 422 Unprocessable Entity
+
+--- Test 5.7: API Docs Available ---
+Start-Process "http://localhost:8080/docs"
+EXPECTED: Swagger UI opens with /generate, /health, /metrics endpoints
+
+================================================================================
+6. METRICS & OBSERVABILITY TESTS
+================================================================================
+
+--- Test 6.1: Prometheus scrape targets ---
+Open: http://localhost:9090/targets
+
+EXPECTED:
+  aperture-inference target shows:
+    State:  UP
+    Last Scrape: < 30s ago
+    Labels: pod="opt-125m-workload-inference-xxx"
+
+If showing DOWN:
+  - Check PodMonitor exists: kubectl get podmonitor -n default
+  - Check Prometheus can reach pod: kubectl get netpol -n default
+
+--- Test 6.2: Query metrics in Prometheus ---
+Open: http://localhost:9090/graph
+
+Query 1 (request rate):
+  rate(aperture_requests_total[1m]) * 60
+
+Query 2 (avg latency):
+  aperture_avg_request_latency_ms
+
+Query 3 (token quota remaining):
+  aperture_token_quota_remaining
+
+Query 4 (uptime):
+  aperture_uptime_seconds
+
+WHAT TO CHECK:
+  - All queries return data (not "No data")
+  - rate() query shows values after running benchmark
+
+--- Test 6.3: Grafana Dashboard ---
+Open: http://localhost:3000
+Login: admin / aperture-admin
+Navigate to: Dashboards → Aperture AI — Inference Observability
+
+OR direct link:
+  http://localhost:3000/d/aperture-ai-v2/aperture-ai-inference-observability
+
+PANELS TO VERIFY:
+  Panel 1  - Total Requests         → Should show number > 0
+  Panel 2  - Tokens Generated       → Increases after /generate calls
+  Panel 3  - Avg Latency ms         → ~0.3ms at idle
+  Panel 4  - Quota Used %           → Gauge 0-100%
+  Panel 5  - Engine Mode            → "CPU Fallback" (yellow) or "GPU Active" (green)
+  Panel 6  - Uptime                 → Increasing
+  Panel 7  - Request Rate (graph)   → Spikes during load test
+  Panel 8  - Token Throughput       → Increases with /generate calls
+  Panel 9  - Latency over time      → Flat line ~0.3ms
+  Panel 10 - Quota Remaining        → Decreasing as tokens used
+  Panel 11 - CPU Usage              → Shows pod CPU consumption
+  Panel 12 - Memory Usage           → Shows pod memory consumption
+
+--- Test 6.4: Verify metrics increment after API call ---
+# Step 1: record current value
+$before = (Invoke-RestMethod http://localhost:8080/metrics) -split "`n" | 
+  Select-String "aperture_requests_total " | Select-Object -Last 1
+
+# Step 2: make 10 requests
+1..10 | ForEach-Object {
+  Invoke-RestMethod http://localhost:8080/health | Out-Null
+}
+
+# Step 3: check new value
+$after = (Invoke-RestMethod http://localhost:8080/metrics) -split "`n" | 
+  Select-String "aperture_requests_total " | Select-Object -Last 1
+
+Write-Host "Before: $before"
+Write-Host "After:  $after"
+# EXPECTED: after value is 10 higher than before
+
+================================================================================
+7. LOAD / PERFORMANCE BENCHMARK
+================================================================================
+
+--- Test 7.1: Run the full load test ---
+cd "e:\aperture ai\inference\benchmarks"
+python load_test.py --url http://localhost:8080 --output results/load_test_results.csv
+
+EXPECTED RESULTS (CPU fallback mode):
+  Concurrency   OK    Fail    P50(ms)   P95(ms)   P99(ms)   RPS
+  ─────────────────────────────────────────────────────────────
+  10            10    0       ~536      ~540       ~540      ~13
+  50            50    0       ~589      ~651       ~659      ~53
+  100           100   0       ~596      ~648       ~658      ~98
+
+WHAT TO CHECK:
+  - Fail count = 0 at all concurrency levels
+  - P99 < 700ms (healthy)
+  - RPS scales linearly (10c→13, 50c→53, 100c→98)
+  - Results CSV written to results/
+
+--- Test 7.2: Time-to-First-Token test ---
+cd "e:\aperture ai\inference\benchmarks"
+python ttft_measure.py --url http://localhost:8080
+
+EXPECTED: TTFT measurements for various prompt lengths
+
+--- Test 7.3: Manual concurrency test ---
+# Run 20 parallel requests using PowerShell jobs
+$jobs = 1..20 | ForEach-Object {
+  Start-Job -ScriptBlock {
+    $body = '{"prompt":"What is machine learning?","max_tokens":20}'
+    Invoke-RestMethod http://localhost:8080/generate -Method POST `
+      -ContentType "application/json" -Body $body
+  }
+}
+$results = $jobs | Wait-Job | Receive-Job
+$results | ForEach-Object { Write-Host "Tokens: $($_.tokens_generated)" }
+
+EXPECTED: All 20 jobs return tokens_generated > 0, no errors
+
+--- Test 7.4: Check results CSV ---
+Import-Csv "e:\aperture ai\inference\benchmarks\results\load_test_summary.csv" | Format-Table
+
+EXPECTED columns:
+  concurrency, total_requests, successful, failed,
+  p50_ms, p95_ms, p99_ms, mean_ms, min_ms, max_ms, throughput_rps
+
+================================================================================
+8. HELM CHART TESTS
+================================================================================
+
+--- Test 8.1: Helm lint (all environments) ---
+cd "e:\aperture ai"
+helm lint helm/aperture-ai/
+helm lint helm/aperture-ai/ -f helm/aperture-ai/values-staging.yaml
+helm lint helm/aperture-ai/ -f helm/aperture-ai/values-production.yaml
+
+EXPECTED: "0 chart(s) failed" for all three
+
+--- Test 8.2: Helm dry-run (template render) ---
+helm upgrade --install aperture-ai-test helm/aperture-ai/ `
+  --namespace aperture-test --create-namespace --dry-run
+
+EXPECTED: Exit 0, all resources rendered without error
+
+--- Test 8.3: Helm template output inspection ---
+helm template aperture-ai-test helm/aperture-ai/ | findstr "kind:"
+
+EXPECTED kinds:
+  kind: Deployment
+  kind: Service
+  kind: Ingress          (when ingress.enabled=true)
+  kind: HorizontalPodAutoscaler  (when autoscaling.enabled=true)
+  kind: PodDisruptionBudget
+  kind: NetworkPolicy    (x4 policies)
+  kind: Secret
+  kind: PodMonitor
+  kind: ServiceAccount
+
+--- Test 8.4: Helm install to test namespace ---
+helm upgrade --install aperture-ai-test helm/aperture-ai/ `
+  --namespace aperture-test --create-namespace
+kubectl get all -n aperture-test
+
+EXPECTED: Deployment, Service, NetworkPolicy, PDB all created
+
+--- Test 8.5: Helm upgrade (rolling update simulation) ---
+helm upgrade aperture-ai-test helm/aperture-ai/ `
+  --namespace aperture-test `
+  --set inference.image.tag=latest
+kubectl rollout status deployment -n aperture-test
+
+--- Test 8.6: Cleanup ---
+helm uninstall aperture-ai-test -n aperture-test
+kubectl delete namespace aperture-test
+
+================================================================================
+9. CI/CD PIPELINE TESTS
+================================================================================
+
+--- Test 9.1: Verify GitHub Actions files exist ---
+Get-ChildItem "e:\aperture ai\.github\workflows\"
+
+EXPECTED:
+  ci.yaml
+  release.yaml
+
+--- Test 9.2: Validate YAML syntax ---
+# Install yamllint if available
+pip install yamllint
+yamllint "e:\aperture ai\.github\workflows\ci.yaml"
+yamllint "e:\aperture ai\.github\workflows\release.yaml"
+
+--- Test 9.3: Simulate CI locally ---
+# 1. Lint Python
+pip install ruff
+ruff check "e:\aperture ai\inference\"
+
+# 2. Lint Go
+cd "e:\aperture ai\operator"
+go vet ./...
+
+# 3. Run tests
+cd "e:\aperture ai\inference"
+python -m pytest test_server.py -v
+
+# 4. Docker build
+cd "e:\aperture ai\inference"
+docker build -t aperture-inference:ci-test .
+docker images aperture-inference:ci-test
+
+EXPECTED: All steps pass with exit code 0
+
+================================================================================
+10. SECURITY TESTS
+================================================================================
+
+--- Test 10.1: Verify pod runs as non-root ---
+kubectl exec -n default opt-125m-workload-inference-xxx -- id
+
+EXPECTED:
+  uid=1000(aperture) gid=1000(aperture) groups=1000(aperture)
+
+--- Test 10.2: Verify read-only filesystem ---
+kubectl exec -n default opt-125m-workload-inference-xxx -- \
+  sh -c "touch /test.txt && echo FAIL || echo PASS"
+
+EXPECTED: PASS (write blocked, read-only root filesystem)
+
+--- Test 10.3: Verify /tmp is writable (EmptyDir) ---
+kubectl exec -n default opt-125m-workload-inference-xxx -- \
+  sh -c "touch /tmp/test.txt && echo PASS || echo FAIL"
+
+EXPECTED: PASS (/tmp is an EmptyDir, writable)
+
+--- Test 10.4: Verify no GPU resource when gpu=0 ---
+kubectl get deployment opt-125m-workload-inference -n default \
+  -o jsonpath="{.spec.template.spec.containers[0].resources.limits}"
+
+EXPECTED: Should NOT contain "nvidia.com/gpu"
+
+--- Test 10.5: Network Policy enforced ---
+# Try to access inference from an unauthorized pod
+kubectl run test-netpol --image=curlimages/curl --restart=Never -n default -- \
+  curl -s --max-time 5 http://opt-125m-workload-inference:8080/health
+
+kubectl logs test-netpol -n default
+kubectl delete pod test-netpol -n default
+
+EXPECTED: Request times out (blocked by NetworkPolicy deny-all)
+
+--- Test 10.6: Secret not in plain text ---
+kubectl get secret aperture-secrets -n default -o yaml
+
+EXPECTED: Values are base64 encoded (empty string "" for placeholder)
+WHAT NOT TO SEE: plain text tokens in values field
+
+================================================================================
+11. END-TO-END TEST CHECKLIST
+================================================================================
+
+Run this checklist in order for a full platform validation:
+
+  [ ] 1. kubectl get nodes shows cluster Ready
+  [ ] 2. Operator pod is 1/1 Running
+  [ ] 3. Inference pod is 1/1 Running (no CrashLoopBackOff)
+  [ ] 4. kubectl logs shows "CPU fallback mode" activated
+  [ ] 5. /health returns {"status":"healthy (fallback)"}
+  [ ] 6. /generate returns text and tokens_generated > 0
+  [ ] 7. /metrics returns all 7 Prometheus metrics
+  [ ] 8. aperture_requests_total increments on each request
+  [ ] 9. Prometheus target shows UP at localhost:9090/targets
+  [ ] 10. Grafana dashboard panels show data at localhost:3000
+  [ ] 11. Load test passes: 0 failures at 100 concurrency, ~98 RPS
+  [ ] 12. Helm lint passes for all 3 environments
+  [ ] 13. Helm dry-run exits 0
+  [ ] 14. Pod runs as uid=1000 (non-root)
+  [ ] 15. Root filesystem is read-only, /tmp is writable
+
+================================================================================
+12. DEBUGGING GUIDE
+================================================================================
+
+PROBLEM: Pod in CrashLoopBackOff
+  kubectl logs <pod> -n default -c inference --previous
+  kubectl describe pod <pod> -n default
+  LOOK FOR: Permission denied, getpwuid error, CUDA errors
+
+PROBLEM: Init:Error (preloader crashes)
+  kubectl logs <pod> -n default -c model-preloader
+  LOOK FOR: HuggingFace download errors, /tmp write permission
+  FIX: kubectl describe pod — check Events section
+
+PROBLEM: /generate returns 'NoneType not callable'
+  The SamplingParams vLLM call is before the fallback check
+  FIX: Ensure fallback check comes before SamplingParams() in server.py
+
+PROBLEM: Prometheus shows target DOWN
+  kubectl get podmonitor -n default
+  kubectl describe podmonitor -n default
+  CHECK: label selector matches pod labels
+
+PROBLEM: Grafana shows "No data"
+  1. Check datasource: Settings → Data Sources → Prometheus → Test
+  2. Check UID: should be PBFA97CFB590B2093
+  3. Query Prometheus directly: localhost:9090
+
+PROBLEM: Port-forward keeps dying
+  RUN: powershell -File "e:\aperture ai\port-forward.ps1"
+  KEEP THAT WINDOW OPEN
+
+PROBLEM: Helm lint fails
+  helm lint helm/aperture-ai/ --debug   # shows exact template error
+  helm template aperture-ai-test helm/aperture-ai/ 2>&1  # render all
+
+================================================================================
+13. EXPECTED OUTPUTS REFERENCE
+================================================================================
+
+HEALTH CHECK (expected):
+  {"status":"healthy (fallback)","model":"facebook/opt-125m",
+   "tokens_generated":0,"token_quota":50000,"uptime_seconds":594}
+
+GENERATE (expected):
+  {"text":"[CPU Fallback] <prompt> → Aperture AI is a GPU-orchestrated...",
+   "tokens_generated":20}
+
+METRICS (expected — all 7 present):
+  aperture_requests_total
+  aperture_tokens_generated_total
+  aperture_token_quota
+  aperture_token_quota_remaining
+  aperture_avg_request_latency_ms
+  aperture_uptime_seconds
+  aperture_engine_loaded
+
+LOAD TEST SUMMARY (expected):
+  Concurrency  OK    Fail  P50    P95    P99    RPS
+  10           10    0     536ms  540ms  540ms  13.0
+  50           50    0     589ms  651ms  659ms  53.2
+  100          100   0     596ms  648ms  658ms  98.2
+
+HELM LINT (expected):
+  1 chart(s) linted, 0 chart(s) failed
+
+OPERATOR LOGS (expected):
+  "Reconciling GPUWorkload"
+  "CPU fallback activated"
+  "Deployment created"
+
+================================================================================
+  END OF TESTING GUIDE
+  Aperture AI — Version 1.0.0
+  Last Updated: May 2026
+================================================================================

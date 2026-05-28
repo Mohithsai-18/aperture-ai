@@ -1,0 +1,17 @@
+apiVersion: v2
+name: aperture-ai
+description: Production-grade GPU-accelerated LLM inference platform on Kubernetes
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - llm
+  - inference
+  - gpu
+  - vllm
+  - ai
+home: https://github.com/mohithsai18/aperture-ai
+maintainers:
+  - name: Mohith Sai
+    email: mohithsai18@example.com
+dependencies: []

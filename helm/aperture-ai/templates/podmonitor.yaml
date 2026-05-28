@@ -1,0 +1,23 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.podMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "aperture-ai.fullname" . }}-inference
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "aperture-ai.labels" . | nindent 4 }}
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      app: aperture-inference
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.monitoring.podMonitor.interval }}
+      scrapeTimeout: {{ .Values.monitoring.podMonitor.scrapeTimeout }}
+      honorLabels: true
+{{- end }}

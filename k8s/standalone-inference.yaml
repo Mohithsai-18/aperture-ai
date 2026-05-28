@@ -1,0 +1,70 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aperture-inference
+  namespace: default
+  labels:
+    app.kubernetes.io/name: aperture-inference
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aperture-inference
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aperture-inference
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+      containers:
+        - name: inference-server
+          image: mohithsai18/aperture-inference:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: TORCHINDUCTOR_CACHE_DIR
+              value: "/tmp/torchinductor"
+            - name: MODEL_PATH
+              value: "facebook/opt-125m"
+            - name: USE_GPU
+              value: "false"
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 4Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aperture-inference-svc
+  namespace: default
+  labels:
+    app.kubernetes.io/name: aperture-inference
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: aperture-inference
