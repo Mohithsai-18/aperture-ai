@@ -38,7 +38,7 @@ Before running any tests, ensure these are ready:
       Expected: opt-125m-workload-inference-xxx   1/1   Running
 
   [D] Port-forwards active (run port-forward.ps1 or manually):
-      kubectl port-forward svc/kube-prometheus-stack-grafana 3000:80 -n aperture-monitoring
+      kubectl port-forward svc/kube-prometheus-stack-grafana 3050:80 -n aperture-monitoring
       kubectl port-forward pod/<inference-pod> 8080:8080 -n default
 
   [E] Python 3.11 installed with httpx:
@@ -301,12 +301,12 @@ WHAT TO CHECK:
   - rate() query shows values after running benchmark
 
 --- Test 6.3: Grafana Dashboard ---
-Open: http://localhost:3000
+Open: http://localhost:3050
 Login: admin / aperture-admin
 Navigate to: Dashboards → Aperture AI — Inference Observability
 
 OR direct link:
-  http://localhost:3000/d/aperture-ai-v2/aperture-ai-inference-observability
+  http://localhost:3050/d/aperture-ai-v2/aperture-ai-inference-observability
 
 PANELS TO VERIFY:
   Panel 1  - Total Requests         → Should show number > 0
@@ -533,7 +533,7 @@ Run this checklist in order for a full platform validation:
   [ ] 7. /metrics returns all 7 Prometheus metrics
   [ ] 8. aperture_requests_total increments on each request
   [ ] 9. Prometheus target shows UP at localhost:9090/targets
-  [ ] 10. Grafana dashboard panels show data at localhost:3000
+  [ ] 10. Grafana dashboard panels show data at localhost:3050
   [ ] 11. Load test passes: 0 failures at 100 concurrency, ~98 RPS
   [ ] 12. Helm lint passes for all 3 environments
   [ ] 13. Helm dry-run exits 0

@@ -39,3 +39,18 @@ The Prometheus metrics exposition endpoint returning the system's operational me
 - `aperture_engine_loaded`: Indicator if vLLM GPU engine is active (`1`) or CPU fallback (`0`).
 
 ![Aperture AI Prometheus Metrics](docs/images/metrics.png)
+
+---
+
+## 4. Grafana Observability Dashboard
+
+A dynamic Grafana dashboard that provides real-time visualization of system metrics scraped from the `/metrics` endpoint. The dashboard contains panels for:
+- **Total Requests**: Real-time counter of total inference requests processed.
+- **Tokens Generated**: Cumulative and instantaneous rate of token generation.
+- **Average Latency**: Average and percentile (P50, P95, P99) requests latency.
+- **Quota Throttling**: Gauge showing remaining token quota and usage.
+- **Engine Status**: Active tracking of model loaded status (CPU fallback vs. GPU active).
+- **System Uptime & Resource Consumption**: Tracks host memory/CPU usage and system up time.
+
+![Aperture AI Grafana Dashboard](docs/images/grafana_dashboard.png)
+
