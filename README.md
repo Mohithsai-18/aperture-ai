@@ -4,23 +4,23 @@ Production-grade Kubernetes platform for dynamically scheduling GPU workloads an
 
 ## Platform Screenshots & Observability Dashboards
 
-### 1. Interactive Swagger API Documentation (`/docs`)
-![FastAPI Swagger UI Documentation](docs/images/swagger_docs.png)
-
-### 2. Inference Server Health Check (`/health`)
-![FastAPI Health Check Endpoint](docs/images/health_check.png)
-
-### 3. Local Prometheus Metrics Exposition (`/metrics`)
-![Aperture Prometheus Metrics](docs/images/metrics.png)
-
-### 4. Grafana Observability Dashboard — Overview
+### 1. Grafana Observability Dashboard — Overview
 ![Aperture Grafana Dashboard Overview](docs/images/grafana_dashboard_overview.png)
 
-### 5. Grafana Observability Dashboard — Detailed Panels & Resources
+### 2. Grafana Observability Dashboard — Detailed Panels & Resources
 ![Aperture Grafana Dashboard Details](docs/images/grafana_dashboard_details.png)
 
-### 6. Grafana Observability Alert Rules
+### 3. Grafana Observability Alert Rules
 ![Aperture Grafana Alerts](docs/images/grafana_alerts.png)
+
+### 4. Interactive Swagger API Documentation (`/docs`)
+![FastAPI Swagger UI Documentation](docs/images/swagger_docs.png)
+
+### 5. Inference Server Health Check (`/health`)
+![FastAPI Health Check Endpoint](docs/images/health_check.png)
+
+### 6. Local Prometheus Metrics Exposition (`/metrics`)
+![Aperture Prometheus Metrics](docs/images/metrics.png)
 
 ---
 
