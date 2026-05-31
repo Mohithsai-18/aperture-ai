@@ -2,15 +2,24 @@
 
 Production-grade Kubernetes platform for dynamically scheduling GPU workloads and serving LLM inference at scale.
 
-## Grafana Observability Dashboards
+## Platform Screenshots & Observability Dashboards
 
-### 1. Dashboard Overview
+### 1. Interactive Swagger API Documentation (`/docs`)
+![FastAPI Swagger UI Documentation](docs/images/swagger_docs.png)
+
+### 2. Inference Server Health Check (`/health`)
+![FastAPI Health Check Endpoint](docs/images/health_check.png)
+
+### 3. Local Prometheus Metrics Exposition (`/metrics`)
+![Aperture Prometheus Metrics](docs/images/metrics.png)
+
+### 4. Grafana Observability Dashboard — Overview
 ![Aperture Grafana Dashboard Overview](docs/images/grafana_dashboard_overview.png)
 
-### 2. Performance & Pod Resources
+### 5. Grafana Observability Dashboard — Detailed Panels & Resources
 ![Aperture Grafana Dashboard Details](docs/images/grafana_dashboard_details.png)
 
-### 3. Configured Alert Rules
+### 6. Grafana Observability Alert Rules
 ![Aperture Grafana Alerts](docs/images/grafana_alerts.png)
 
 ---
@@ -127,15 +136,7 @@ spec:
 | `/metrics/json` | GET | JSON metrics for dashboards |
 | `/openapi.json` | GET | OpenAPI schema |
 
-### Interactive API Documentation (`/docs`)
-
-![FastAPI Swagger UI Documentation](docs/images/swagger_docs.png)
-
-### Inference Server Health Check (`/health`)
-
-![FastAPI Health Check Endpoint](docs/images/health_check.png)
-
-For a complete set of endpoint verification screenshots, see [SCREENSHOTS.md](SCREENSHOTS.md).
+*(Note: For interactive docs and health check screenshots, see the top of this document or visit [SCREENSHOTS.md](SCREENSHOTS.md).)*
 
 ## Observability
 
@@ -145,11 +146,7 @@ For a complete set of endpoint verification screenshots, see [SCREENSHOTS.md](SC
 - **Tracing**: OpenTelemetry → OTLP (Jaeger/Tempo), opt-in via `OTEL_ENABLED=true`
 - **Logging**: JSON-structured to stdout for Fluentd/Loki
 
-#### Local Prometheus Metrics Exposition (`/metrics`)
-
-![Aperture Prometheus Metrics](docs/images/metrics.png)
-
-*(Note: For the full set of Grafana dashboards and alert rules, see the top of this document or visit [SCREENSHOTS.md](SCREENSHOTS.md).)*
+*(Note: For the Prometheus metrics, Grafana dashboards, and alert rules screenshots, see the top of this document or visit [SCREENSHOTS.md](SCREENSHOTS.md).)*
 
 ## Autoscaling
 
