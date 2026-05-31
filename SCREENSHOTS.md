@@ -42,15 +42,37 @@ The Prometheus metrics exposition endpoint returning the system's operational me
 
 ---
 
-## 4. Grafana Observability Dashboard
+## 4. Grafana Observability Dashboard — Overview
 
-A dynamic Grafana dashboard that provides real-time visualization of system metrics scraped from the `/metrics` endpoint. The dashboard contains panels for:
+A dynamic Grafana dashboard that provides real-time visualization of system metrics scraped from the `/metrics` endpoint. This overview panel tracks:
 - **Total Requests**: Real-time counter of total inference requests processed.
-- **Tokens Generated**: Cumulative and instantaneous rate of token generation.
+- **Tokens Generated**: Cumulative token count since server launch.
 - **Average Latency**: Average and percentile (P50, P95, P99) requests latency.
 - **Quota Throttling**: Gauge showing remaining token quota and usage.
-- **Engine Status**: Active tracking of model loaded status (CPU fallback vs. GPU active).
-- **System Uptime & Resource Consumption**: Tracks host memory/CPU usage and system up time.
 
-![Aperture AI Grafana Dashboard](docs/images/grafana_dashboard.png)
+![Aperture AI Grafana Dashboard Overview](docs/images/grafana_dashboard_overview.png)
+
+---
+
+## 5. Grafana Observability Dashboard — Detailed Panels & Resources
+
+This detailed metrics view visualizes throughput and performance over time:
+- **Request Rate (QPS)**: Tracks the frequency of incoming API calls.
+- **Token Throughput**: Monitors tokens generated per second.
+- **Uptime & Engine Status**: Confirms model loaded status (CPU fallback mode active).
+- **CPU & Memory Consumption**: Detailed resource consumption curves of the inference pod.
+
+![Aperture AI Grafana Dashboard Details](docs/images/grafana_dashboard_details.png)
+
+---
+
+## 6. Grafana Observability Alert Rules
+
+The configured Prometheus rules and alert evaluations in Grafana, ready to trigger alerts for key operational issues:
+- **InferenceServerDown**: Fires if the inference pod target becomes unreachable.
+- **TokenQuotaNearLimit**: Fires if the client's token usage exceeds 90% of their dynamic quota.
+- **HighAvgLatency**: Fires if the average request latency rises above SLA limits.
+
+![Aperture AI Grafana Alerts](docs/images/grafana_alerts.png)
+
 

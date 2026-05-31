@@ -114,9 +114,13 @@ spec:
 | `/metrics/json` | GET | JSON metrics for dashboards |
 | `/openapi.json` | GET | OpenAPI schema |
 
-### Interactive API Documentation
+### Interactive API Documentation (`/docs`)
 
 ![FastAPI Swagger UI Documentation](docs/images/swagger_docs.png)
+
+### Inference Server Health Check (`/health`)
+
+![FastAPI Health Check Endpoint](docs/images/health_check.png)
 
 For a complete set of endpoint verification screenshots, see [SCREENSHOTS.md](SCREENSHOTS.md).
 
@@ -128,13 +132,21 @@ For a complete set of endpoint verification screenshots, see [SCREENSHOTS.md](SC
 - **Tracing**: OpenTelemetry → OTLP (Jaeger/Tempo), opt-in via `OTEL_ENABLED=true`
 - **Logging**: JSON-structured to stdout for Fluentd/Loki
 
-#### Local Prometheus Metrics Exposition
+#### Local Prometheus Metrics Exposition (`/metrics`)
 
 ![Aperture Prometheus Metrics](docs/images/metrics.png)
 
-#### Grafana Observability Dashboard
+#### Grafana Observability Dashboard — Overview
 
-![Aperture Grafana Dashboard](docs/images/grafana_dashboard.png)
+![Aperture Grafana Dashboard Overview](docs/images/grafana_dashboard_overview.png)
+
+#### Grafana Observability Dashboard — Detailed Panels
+
+![Aperture Grafana Dashboard Details](docs/images/grafana_dashboard_details.png)
+
+#### Grafana Observability Alert Rules
+
+![Aperture Grafana Alerts](docs/images/grafana_alerts.png)
 
 ## Autoscaling
 
