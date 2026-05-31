@@ -2,6 +2,19 @@
 
 Production-grade Kubernetes platform for dynamically scheduling GPU workloads and serving LLM inference at scale.
 
+## Grafana Observability Dashboards
+
+### 1. Dashboard Overview
+![Aperture Grafana Dashboard Overview](docs/images/grafana_dashboard_overview.png)
+
+### 2. Performance & Pod Resources
+![Aperture Grafana Dashboard Details](docs/images/grafana_dashboard_details.png)
+
+### 3. Configured Alert Rules
+![Aperture Grafana Alerts](docs/images/grafana_alerts.png)
+
+---
+
 ## Architecture
 
 ```
@@ -136,17 +149,7 @@ For a complete set of endpoint verification screenshots, see [SCREENSHOTS.md](SC
 
 ![Aperture Prometheus Metrics](docs/images/metrics.png)
 
-#### Grafana Observability Dashboard — Overview
-
-![Aperture Grafana Dashboard Overview](docs/images/grafana_dashboard_overview.png)
-
-#### Grafana Observability Dashboard — Detailed Panels
-
-![Aperture Grafana Dashboard Details](docs/images/grafana_dashboard_details.png)
-
-#### Grafana Observability Alert Rules
-
-![Aperture Grafana Alerts](docs/images/grafana_alerts.png)
+*(Note: For the full set of Grafana dashboards and alert rules, see the top of this document or visit [SCREENSHOTS.md](SCREENSHOTS.md).)*
 
 ## Autoscaling
 
