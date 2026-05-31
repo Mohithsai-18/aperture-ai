@@ -114,6 +114,12 @@ spec:
 | `/metrics/json` | GET | JSON metrics for dashboards |
 | `/openapi.json` | GET | OpenAPI schema |
 
+### Interactive API Documentation
+
+![FastAPI Swagger UI Documentation](docs/images/swagger_docs.png)
+
+For a complete set of endpoint verification screenshots, see [SCREENSHOTS.md](SCREENSHOTS.md).
+
 ## Observability
 
 - **Prometheus**: ServiceMonitor auto-discovers inference pods (`k8s/monitoring.yaml`)
@@ -121,6 +127,10 @@ spec:
 - **Alerts**: Inference down, quota near limit, high latency
 - **Tracing**: OpenTelemetry → OTLP (Jaeger/Tempo), opt-in via `OTEL_ENABLED=true`
 - **Logging**: JSON-structured to stdout for Fluentd/Loki
+
+#### Local Prometheus Metrics Exposition
+
+![Aperture Prometheus Metrics](docs/images/metrics.png)
 
 ## Autoscaling
 
