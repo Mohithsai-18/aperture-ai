@@ -132,6 +132,10 @@ For a complete set of endpoint verification screenshots, see [SCREENSHOTS.md](SC
 
 ![Aperture Prometheus Metrics](docs/images/metrics.png)
 
+#### Grafana Observability Dashboard
+
+![Aperture Grafana Dashboard](docs/images/grafana_dashboard.png)
+
 ## Autoscaling
 
 HPA scales on CPU utilization (built-in) and GPU utilization (via prometheus-adapter + DCGM exporter):
